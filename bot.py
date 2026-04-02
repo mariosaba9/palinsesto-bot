@@ -47,7 +47,15 @@ def parse_palinsesto(text: str) -> list[dict]:
     e raccoglie Selezione e Quota dalle righe successive.
     """
     events = []
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+
+    # Pulizia: rimuove bullet points, trattini, simboli vari a inizio riga
+    clean_lines = []
+    for l in text.splitlines():
+        l = l.strip()
+        l = re.sub(r"^[•\-\*oO°➤➜▸▶◆◉●]\s*", "", l).strip()
+        if l:
+            clean_lines.append(l)
+    lines = clean_lines
 
     # Regex per la riga principale dell'evento
     header_re = re.compile(
