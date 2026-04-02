@@ -4,8 +4,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
-import os
-os.environ["TZ"] = "Europe/Rome"
+from zoneinfo import ZoneInfo
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -14,6 +13,8 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+
+ROME = ZoneInfo("Europe/Rome")
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
