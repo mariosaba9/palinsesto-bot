@@ -4,6 +4,8 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
+import os
+os.environ["TZ"] = "Europe/Rome"
 from telegram import Update
 from telegram.ext import (
     Application,
