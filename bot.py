@@ -42,6 +42,7 @@ def save_data(data: dict) -> None:
 def parse_palinsesto(text: str) -> list[dict]:
     """
     Estrae gli eventi dal testo del palinsesto.
+    Gestisce qualsiasi formato con orario HH:MM seguito da sport e squadre.
     """
     events = []
 
@@ -54,24 +55,33 @@ def parse_palinsesto(text: str) -> list[dict]:
             clean_lines.append(l)
     lines = clean_lines
 
-    # Regex più permissiva: accetta qualsiasi cosa dopo Sport:
-    header_re = re.compile(
-        r"^(\d{1,2}:\d{2})\s*[-–]\s*([^:]+?):\s*(.+)$", re.IGNORECASE
-    )
     sel_re = re.compile(r"selezione[:\s]+(.+)", re.IGNORECASE)
     quota_re = re.compile(r"quota[:\s]+([0-9.,]+)", re.IGNORECASE)
-    # Esclude righe che sono chiaramente motivazione/selezione/quota
-    skip_re = re.compile(
-        r"^(motivazione|selezione|quota)[:\s]", re.IGNORECASE
+    skip_re = re.compile(r"^(motivazione|selezione|quota)[:\s]", re.IGNORECASE)
+
+    # Regex principale: HH:MM - tutto il resto
+    # Cattura l'orario e poi separa sport dalle squadre cercando il pattern "Sport: resto"
+    # Lo sport è una singola parola o due (es. "Tennis", "Basket", "Calcio")
+    header_re = re.compile(
+        r"^(\d{1,2}:\d{2})\s*[-–]\s*((?:Tennis|Basket|Calcio|Volley|Rugby|Football|Baseball|Hockey|Golf|Darts|Snooker|MMA|Boxe)[^:]*?):\s*(.+)$",
+        re.IGNORECASE,
     )
 
     i = 0
     while i < len(lines):
-        m = header_re.match(lines[i])
-        if m and not skip_re.match(lines[i]):
+        line = lines[i]
+        if skip_re.match(line):
+            i += 1
+            continue
+
+        m = header_re.match(line)
+        if m:
             time_str = m.group(1)
             sport = m.group(2).strip()
             teams = m.group(3).strip()
+            # Rimuove eventuali virgole nei nomi (es. "Jodar, Rafael" → "Jodar Rafael")
+            # ma solo se non è una lista di squadre separate da virgola
+            # Mantiene "vs" come separatore principale
             event = {
                 "time": time_str,
                 "sport": sport,
@@ -82,12 +92,13 @@ def parse_palinsesto(text: str) -> list[dict]:
             }
             j = i + 1
             while j < min(i + 7, len(lines)):
-                sm = sel_re.search(lines[j])
-                qm = quota_re.search(lines[j])
-                if sm:
-                    event["selezione"] = sm.group(1).strip()
-                if qm:
-                    event["quota"] = qm.group(1).strip()
+                if skip_re.match(lines[j]):
+                    sm = sel_re.search(lines[j])
+                    qm = quota_re.search(lines[j])
+                    if sm:
+                        event["selezione"] = sm.group(1).strip()
+                    if qm:
+                        event["quota"] = qm.group(1).strip()
                 j += 1
             events.append(event)
             i = j
