@@ -57,31 +57,25 @@ def parse_palinsesto(text: str) -> list[dict]:
 
     sel_re = re.compile(r"selezione[:\s]+(.+)", re.IGNORECASE)
     quota_re = re.compile(r"quota[:\s]+([0-9.,]+)", re.IGNORECASE)
-    skip_re = re.compile(r"^(motivazione|selezione|quota)[:\s]", re.IGNORECASE)
 
-    # Regex principale: HH:MM - tutto il resto
-    # Cattura l'orario e poi separa sport dalle squadre cercando il pattern "Sport: resto"
-    # Lo sport è una singola parola o due (es. "Tennis", "Basket", "Calcio")
+    # Riconosce una riga evento: HH:MM - Sport: squadre
     header_re = re.compile(
-        r"^(\d{1,2}:\d{2})\s*[-–]\s*((?:Tennis|Basket|Calcio|Volley|Rugby|Football|Baseball|Hockey|Golf|Darts|Snooker|MMA|Boxe)[^:]*?):\s*(.+)$",
+        r"^(\d{1,2}:\d{2})\s*[-–]\s*"
+        r"(Tennis|Basket|Calcio|Volley|Rugby|Football|Baseball|Hockey|Golf|Darts|Snooker|MMA|Boxe|\w+)"
+        r"\s*:\s*(.+)$",
         re.IGNORECASE,
     )
 
     i = 0
     while i < len(lines):
         line = lines[i]
-        if skip_re.match(line):
-            i += 1
-            continue
 
         m = header_re.match(line)
         if m:
             time_str = m.group(1)
             sport = m.group(2).strip()
             teams = m.group(3).strip()
-            # Rimuove eventuali virgole nei nomi (es. "Jodar, Rafael" → "Jodar Rafael")
-            # ma solo se non è una lista di squadre separate da virgola
-            # Mantiene "vs" come separatore principale
+
             event = {
                 "time": time_str,
                 "sport": sport,
@@ -90,18 +84,20 @@ def parse_palinsesto(text: str) -> list[dict]:
                 "quota": "",
                 "notified": False,
             }
+
+            # Cerca Selezione e Quota nelle righe successive (max 8 righe)
             j = i + 1
-            while j < min(i + 7, len(lines)):
-                if skip_re.match(lines[j]):
-                    sm = sel_re.search(lines[j])
-                    qm = quota_re.search(lines[j])
-                    if sm:
-                        event["selezione"] = sm.group(1).strip()
-                    if qm:
-                        event["quota"] = qm.group(1).strip()
+            while j < min(i + 9, len(lines)):
+                sm = sel_re.search(lines[j])
+                qm = quota_re.search(lines[j])
+                if sm and not event["selezione"]:
+                    event["selezione"] = sm.group(1).strip()
+                if qm and not event["quota"]:
+                    event["quota"] = qm.group(1).strip()
                 j += 1
+
             events.append(event)
-            i = j
+            i += 1
         else:
             i += 1
 
@@ -185,11 +181,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_palinsesto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Accetta il palinsesto in due modi:
-    1. /palinsesto seguito dal testo nella stessa riga
-    2. Il comando da solo → il bot aspetta il messaggio successivo
-    """
     args_text = " ".join(context.args) if context.args else ""
     if args_text:
         await _process_palinsesto(update, args_text)
@@ -201,7 +192,6 @@ async def cmd_palinsesto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def receive_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Riceve testo libero: se in attesa del palinsesto, lo processa."""
     if context.user_data.get("waiting_palinsesto"):
         context.user_data["waiting_palinsesto"] = False
         await _process_palinsesto(update, update.message.text)
@@ -222,7 +212,6 @@ async def _process_palinsesto(update: Update, text: str) -> None:
         return
 
     data = load_data()
-    # Aggiunge i nuovi eventi (evita duplicati per orario+squadre)
     existing_keys = {(e["time"], e["teams"]) for e in data["events"]}
     added = 0
     for ev in events:
@@ -299,7 +288,6 @@ def main() -> None:
 
     app = Application.builder().token(token).build()
 
-    # Handlers
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("palinsesto", cmd_palinsesto))
     app.add_handler(CommandHandler("lista", cmd_lista))
@@ -307,7 +295,6 @@ def main() -> None:
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_text))
 
-    # Job scheduler — ogni 60 secondi controlla gli eventi
     app.job_queue.run_repeating(check_events, interval=60, first=10)
 
     logger.info("Bot avviato e in ascolto...")
