@@ -112,7 +112,7 @@ def parse_palinsesto(text: str) -> list[dict]:
 async def check_events(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Controlla ogni minuto se ci sono eventi a 10 minuti dall'inizio."""
     data = load_data()
-    now = datetime.now()
+    now = datetime.now(ROME).replace(tzinfo=None)
     changed = False
 
     for event in data["events"]:
