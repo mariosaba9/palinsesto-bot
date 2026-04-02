@@ -42,13 +42,10 @@ def save_data(data: dict) -> None:
 def parse_palinsesto(text: str) -> list[dict]:
     """
     Estrae gli eventi dal testo del palinsesto.
-    Cerca righe con pattern  HH:MM - Sport: Squadra1 vs Squadra2
-    oppure  HH:MM - Sport: Squadra1, Squadra2
-    e raccoglie Selezione e Quota dalle righe successive.
     """
     events = []
 
-    # Pulizia: rimuove bullet points, trattini, simboli vari a inizio riga
+    # Pulizia: rimuove bullet points e simboli a inizio riga
     clean_lines = []
     for l in text.splitlines():
         l = l.strip()
@@ -57,18 +54,24 @@ def parse_palinsesto(text: str) -> list[dict]:
             clean_lines.append(l)
     lines = clean_lines
 
-    # Regex per la riga principale dell'evento
+    # Regex più permissiva: accetta qualsiasi cosa dopo Sport:
     header_re = re.compile(
-        r"^(\d{1,2}:\d{2})\s*[-–]\s*(.+?):\s*(.+)$", re.IGNORECASE
+        r"^(\d{1,2}:\d{2})\s*[-–]\s*([^:]+?):\s*(.+)$", re.IGNORECASE
     )
     sel_re = re.compile(r"selezione[:\s]+(.+)", re.IGNORECASE)
     quota_re = re.compile(r"quota[:\s]+([0-9.,]+)", re.IGNORECASE)
+    # Esclude righe che sono chiaramente motivazione/selezione/quota
+    skip_re = re.compile(
+        r"^(motivazione|selezione|quota)[:\s]", re.IGNORECASE
+    )
 
     i = 0
     while i < len(lines):
         m = header_re.match(lines[i])
-        if m:
-            time_str, sport, teams = m.group(1), m.group(2).strip(), m.group(3).strip()
+        if m and not skip_re.match(lines[i]):
+            time_str = m.group(1)
+            sport = m.group(2).strip()
+            teams = m.group(3).strip()
             event = {
                 "time": time_str,
                 "sport": sport,
@@ -77,7 +80,6 @@ def parse_palinsesto(text: str) -> list[dict]:
                 "quota": "",
                 "notified": False,
             }
-            # Cerca Selezione e Quota nelle righe successive (max 6 righe)
             j = i + 1
             while j < min(i + 7, len(lines)):
                 sm = sel_re.search(lines[j])
